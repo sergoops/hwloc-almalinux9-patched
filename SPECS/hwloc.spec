@@ -3,8 +3,8 @@ Name:      hwloc
 Version:   2.4.1
 Release:   5%{?dist}
 License:   BSD
-URL:       http://www.open-mpi.org/projects/hwloc/
-Source0:   http://www.open-mpi.org/software/hwloc/v2.4/downloads/%{name}-%{version}.tar.bz2
+URL:       https://www.open-mpi.org/projects/hwloc/
+Source0:   https://www.open-mpi.org/software/hwloc/v2.4/downloads/%{name}-%{version}.tar.bz2
 Requires:  %{name}-libs%{?_isa} = %{version}-%{release}
 
 BuildRequires: gcc
