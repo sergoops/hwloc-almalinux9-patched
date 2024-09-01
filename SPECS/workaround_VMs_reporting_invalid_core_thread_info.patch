@@ -1,0 +1,75 @@
+From ff102fdfa95d911a4a1eac33c6cd80cdfe30445d Mon Sep 17 00:00:00 2001
+From: Brice Goglin <Brice.Goglin@inria.fr>
+Date: Tue, 8 Mar 2022 13:47:31 +0100
+Subject: [PATCH] x86: workaround VMs reporting invalid core/thread info
+
+Check some CPUID outputs before dividing since some VMs do not report coherent values.
+
+Crostini / Chrome M99 on Acer C933 Chromebook gets a division by zero error because:
+CPUID leaf 0x1 returns register EDX with bit HTT=28 unset. According to the Intel x86 manual,
+this means:
+ "A value of 0 for HTT indicates there is only a single logical processor in the
+  package and software should assume only a single APIC ID is reserved."
+This seems wrong on a quad-core Celeron 4100 processor.
+Moreover, CPUID leaf 0x4 with subleaf 0 returns a valid first level of cache which
+says (in EAX bits 26-31)that there are 4 cores in the physical package. This is correct,
+and contradicts CPUID leaf 0x1 above.
+
+Thanks to Peter Bense for the report.
+
+Closes #525
+
+Signed-off-by: Brice Goglin <Brice.Goglin@inria.fr>
+---
+ hwloc/topology-x86.c | 28 +++++++++++++++++++++-------
+ 1 file changed, 21 insertions(+), 7 deletions(-)
+
+diff --git a/hwloc/topology-x86.c b/hwloc/topology-x86.c
+index 24ba144d81..a1558f0775 100644
+--- a/hwloc/topology-x86.c
++++ b/hwloc/topology-x86.c
+@@ -614,10 +614,13 @@ static void look_proc(struct hwloc_backend *backend, struct procinfo *infos, uns
+   eax = 0x01;
+   cpuid_or_from_dump(&eax, &ebx, &ecx, &edx, src_cpuiddump);
+   infos->apicid = ebx >> 24;
+-  if (edx & (1 << 28))
++  if (edx & (1 << 28)) {
+     legacy_max_log_proc = 1 << hwloc_flsl(((ebx >> 16) & 0xff) - 1);
+-  else
++  } else {
++    hwloc_debug("HTT bit not set in CPUID 0x01.edx, assuming legacy_max_log_proc = 1\n");
+     legacy_max_log_proc = 1;
++  }
++
+   hwloc_debug("APIC ID 0x%02x legacy_max_log_proc %u\n", infos->apicid, legacy_max_log_proc);
+   infos->ids[PKG] = infos->apicid / legacy_max_log_proc;
+   legacy_log_proc_id = infos->apicid % legacy_max_log_proc;
+@@ -680,12 +683,23 @@ static void look_proc(struct hwloc_backend *backend, struct procinfo *infos, uns
+       unsigned max_nbcores;
+       unsigned max_nbthreads;
+       unsigned threadid __hwloc_attribute_unused;
++      hwloc_debug("Trying to get core/thread IDs from 0x04...\n");
+       max_nbcores = ((eax >> 26) & 0x3f) + 1;
+-      max_nbthreads = legacy_max_log_proc / max_nbcores;
+-      hwloc_debug("thus %u threads\n", max_nbthreads);
+-      threadid = legacy_log_proc_id % max_nbthreads;
+-      infos->ids[CORE] = legacy_log_proc_id / max_nbthreads;
+-      hwloc_debug("this is thread %u of core %u\n", threadid, infos->ids[CORE]);
++      hwloc_debug("found %u cores max\n", max_nbcores);
++      /* some VMs (e.g. issue#525) don't report valid information, check things before dividing by 0. */
++      if (!max_nbcores) {
++        hwloc_debug("cannot detect core/thread IDs from 0x04 without a valid max of cores\n");
++      } else {
++        max_nbthreads = legacy_max_log_proc / max_nbcores;
++        hwloc_debug("found %u threads max\n", max_nbthreads);
++        if (!max_nbthreads) {
++          hwloc_debug("cannot detect core/thread IDs from 0x04 without a valid max of threads\n");
++        } else {
++          threadid = legacy_log_proc_id % max_nbthreads;
++          infos->ids[CORE] = legacy_log_proc_id / max_nbthreads;
++          hwloc_debug("this is thread %u of core %u\n", threadid, infos->ids[CORE]);
++        }
++      }
+     }
+   }
+ 

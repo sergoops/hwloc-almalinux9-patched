@@ -1,10 +1,13 @@
 Summary:   Portable Hardware Locality - portable abstraction of hierarchical architectures
 Name:      hwloc
 Version:   2.4.1
-Release:   5%{?dist}
+Release:   6%{?dist}
 License:   BSD
 URL:       https://www.open-mpi.org/projects/hwloc/
 Source0:   https://www.open-mpi.org/software/hwloc/v2.4/downloads/%{name}-%{version}.tar.bz2
+
+Patch: workaround_VMs_reporting_invalid_core_thread_info.patch
+
 Requires:  %{name}-libs%{?_isa} = %{version}-%{release}
 
 BuildRequires: gcc
@@ -174,6 +177,9 @@ LD_LIBRARY_PATH=$PWD/hwloc/.libs make check
 %{_libdir}/%{name}/hwloc*
 
 %changelog
+* Mon Sep 02 2024 sergoops <sergoopsmoskal@gmail.com> - 2.4.1-6
+- Add patch for broken VMs
+
 * Mon Aug 09 2021 Mohan Boddu <mboddu@redhat.com> - 2.4.1-5
 - Rebuilt for IMA sigs, glibc 2.34, aarch64 flags
   Related: rhbz#1991688
